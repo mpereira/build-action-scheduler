@@ -1,0 +1,14 @@
+load("@rules_python//python:defs.bzl", "py_binary")
+
+exports_files([".isort.cfg"])
+
+py_binary(
+    name = "isort_bin",
+    srcs = ["__main__.py"],
+    data = [".isort.cfg"],
+    main = "__main__.py",
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@pip//isort",
+    ],
+)

@@ -1,0 +1,166 @@
+* Build Action Scheduler
+
+  This projects implements a build action scheduler that can execute tasks in
+  parallel.
+
+  Until there are no actions left, it will iterate on:
+  1. Identifying actions with no dependencies
+  2. Collecting a batch of actions with no dependencies of size up to the
+     specified parallelism
+  3. Executing the collected actions batch
+
+  Step #3 updates internal state in a way that it represents the state in which
+  the actions were executed.
+
+  To use the scheduler, build the CLI executable and run it against JSON files
+  containing lists of actions.
+
+** Build Python CLI executable
+   #+begin_src bash
+   make bazel_python_app_build 
+   #+end_src
+
+** Run build action scheduler
+   #+begin_src bash
+   python3 ./bazel-bin/org_fraggles/build_action_scheduler/build_action_scheduler_bin.zip \
+           --parallelism 2 \
+           --actions-file actions.json 
+   #+end_src
+
+** Example execution
+   #+begin_src bash
+   cat <<EOF > test_actions_0.json
+   [
+     {
+       "sha1": "e",
+       "duration": 50,
+       "dependencies": []
+     },
+     {
+       "sha1": "b",
+       "duration": 20,
+       "dependencies": [
+         "e"
+       ]
+     },
+     {
+       "sha1": "c",
+       "duration": 30,
+       "dependencies": [
+         "e"
+       ]
+     },
+     {
+       "sha1": "d",
+       "duration": 10,
+       "dependencies": [
+         "b",
+         "c"
+       ]
+     },
+     {
+       "sha1": "f",
+       "duration": 60,
+       "dependencies": []
+     }
+   ]
+   EOF
+   #+end_src
+
+   #+begin_src bash :results code raw
+   python3 ./bazel-bin/org_fraggles/build_action_scheduler/build_action_scheduler_bin.zip \
+           --parallelism 2 \
+           --actions-file test_actions_0.json 
+   #+end_src
+
+   The output will show:
+   1. The =execution_batches= that were executed in parallel
+   2. A valid sequence of =ordered_action_executions=, based on the execution batches
+   3. The =critical_path=
+   4. The =critical_path_duration=
+
+   #+begin_src text
+   {
+     "execution_batches": [
+       [
+         {
+           "sha1": "e",
+           "duration": 50,
+           "dependencies": []
+         },
+         {
+           "sha1": "f",
+           "duration": 60,
+           "dependencies": []
+         }
+       ],
+       [
+         {
+           "sha1": "b",
+           "duration": 20,
+           "dependencies": [
+             "e"
+           ]
+         },
+         {
+           "sha1": "c",
+           "duration": 30,
+           "dependencies": [
+             "e"
+           ]
+         }
+       ],
+       [
+         {
+           "sha1": "d",
+           "duration": 10,
+           "dependencies": [
+             "b",
+             "c"
+           ]
+         }
+       ]
+     ],
+     "ordered_action_executions": [
+       {
+         "sha1": "e",
+         "duration": 50,
+         "dependencies": []
+       },
+       {
+         "sha1": "f",
+         "duration": 60,
+         "dependencies": []
+       },
+       {
+         "sha1": "b",
+         "duration": 20,
+         "dependencies": [
+           "e"
+         ]
+       },
+       {
+         "sha1": "c",
+         "duration": 30,
+         "dependencies": [
+           "e"
+         ]
+       },
+       {
+         "sha1": "d",
+         "duration": 10,
+         "dependencies": [
+           "b",
+           "c"
+         ]
+       }
+     ],
+     "critical_path": [
+       "e",
+       "c",
+       "d"
+     ],
+     "critical_path_duration": 90
+   }
+   #+end_src
+
