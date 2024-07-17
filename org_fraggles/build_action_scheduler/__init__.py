@@ -5,7 +5,7 @@ from typing import Deque, Dict, List, Sequence, Tuple
 from pydantic import BaseModel, Field
 
 Sha1 = str
-Duration = int
+ActionDuration = int
 
 
 @dataclass
@@ -13,7 +13,7 @@ class Action:
     """The representation of a build action."""
 
     sha1: Sha1
-    duration: Duration
+    duration: ActionDuration
     dependencies: List[Sha1]
 
 
@@ -23,10 +23,11 @@ class ActionModel(BaseModel):
     Used for validation."""
 
     sha1: Sha1 = Field(..., min_length=1)
-    duration: Duration = Field(..., gt=0)
+    duration: ActionDuration = Field(..., gt=0)
     dependencies: List[Sha1] = []
 
 
+ActionPath = List[Sha1]
 ExecutionBatch = List[Action]
 BuildPlan = List[ExecutionBatch]
 
@@ -35,9 +36,9 @@ BuildPlan = List[ExecutionBatch]
 class BuildReport:
     """The representation of a build report."""
 
-    execution_batches: List[List[Action]]
+    execution_batches: List[ExecutionBatch]
     critical_path: List[Sha1]
-    critical_path_duration: Duration
+    critical_path_duration: ActionDuration
 
 
 def schedule(parallelism: int, actions: List[Action]) -> BuildReport:
@@ -69,7 +70,21 @@ def schedule(parallelism: int, actions: List[Action]) -> BuildReport:
     # E.g., if both "B" and "C" depend on "A", then {"A": ["B", "C"]}
     action_dependents: Dict[Sha1, Sequence[Sha1]] = defaultdict(list)
 
-    action_path_durations: Dict[Sha1, any] = {
+    # A mapping of action SHA-1 identifier to a tuple that represents an action
+    # path that ends in that identifier.
+    #
+    # E.g., if:
+    # - "A" depends on "B"
+    # - "B" depends on "C"
+    # - "C" depends on nothing
+    #
+    # Then:
+    # {
+    #   "C": (c_duration, ["C"]),
+    #   "B": (b_duration, ["C", "B"]),
+    #   "A": (a_duration, ["C", "B", "A"]),
+    # }
+    max_action_path_durations: Dict[Sha1, Tuple[ActionDuration, ActionPath]] = {
         action.sha1: (action.duration, [action.sha1]) for action in actions
     }
 
@@ -85,6 +100,9 @@ def schedule(parallelism: int, actions: List[Action]) -> BuildReport:
         if action_pending_dependencies_count[action.sha1] == 0
     ]
 
+    if len(leaf_action_sha1s) == 0:
+        raise ValueError("No initial actions without dependencies")
+
     queue = deque(leaf_action_sha1s)
     build_plan: BuildPlan = []
 
@@ -98,19 +116,26 @@ def schedule(parallelism: int, actions: List[Action]) -> BuildReport:
         for _ in range(parallelism):
             if not queue:
                 break
-            current_batch.append(queue.popleft())
+
+            action = queue.popleft()
+            current_batch.append(action)
 
         # 2. Execute batch.
-        critical_path_duration, critical_path = execute(
+        execute(
             actions_by_sha1,
-            action_path_durations,
+            max_action_path_durations,
             action_dependents,
             action_pending_dependencies_count,
             queue,
             current_batch,
         )
 
-        # 3. Record batch execution in build plan.
+        # 3. Get critical path.
+        critical_path_duration, critical_path = max(
+            max_action_path_durations.values(), key=lambda x: x[0]
+        )
+
+        # 4. Record batch execution in build plan.
         build_plan.append([actions_by_sha1[sha1] for sha1 in current_batch])
 
     # Restore original action dependencies that were consumed in the algorithm.
@@ -127,38 +152,38 @@ def schedule(parallelism: int, actions: List[Action]) -> BuildReport:
 
 def execute(
     actions_by_sha1: Dict[Sha1, Action],
-    action_path_durations,
+    max_action_path_durations: Dict[Sha1, Tuple[ActionDuration, ActionPath]],
     action_dependents: Dict[Sha1, Sequence[Sha1]],
     action_pending_dependencies_count: Dict[Sha1, int],
     queue: Deque[Sha1],
     batch: Sequence[Sha1],
-) -> Tuple[Duration, List[Sha1]]:
+) -> None:
     """Executes a batch of actions.
 
-    Updates the state of `action_dependents`, `action_pending_dependencies_count`, and `queue`.
+    Updates the state of `max_action_path_durations`, `action_pending_dependencies_count`, and `queue`.
 
     Args:
         actions_by_sha1: Mapping from SHA-1 strings to action objects.
-        action_path_durations: Mapping from action to its duration and path.
+        max_action_path_durations: Mapping from action to its duration and path.
         action_dependents: Mapping from action to its dependents.
         action_pending_dependencies_count: Count of pending dependencies for each action.
         queue: Queue of actions ready to be executed.
         batch: The current batch of actions to execute.
+
+    Returns: the maximum
     """
     for action_sha1 in batch:
-        current_duration, current_path = action_path_durations[action_sha1]
+        current_duration, current_path = max_action_path_durations[action_sha1]
+
         for child in action_dependents[action_sha1]:
             new_duration = current_duration + actions_by_sha1[child].duration
-            if new_duration > action_path_durations[child][0]:
-                action_path_durations[child] = (new_duration, current_path + [child])
+            if new_duration > max_action_path_durations[child][0]:
+                max_action_path_durations[child] = (
+                    new_duration,
+                    current_path + [child],
+                )
 
             action_pending_dependencies_count[child] -= 1
 
             if action_pending_dependencies_count[child] == 0:
                 queue.append(child)
-
-    critical_path_duration, critical_path = max(
-        action_path_durations.values(), key=lambda x: x[0]
-    )
-
-    return critical_path_duration, critical_path
