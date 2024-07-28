@@ -1,5 +1,6 @@
 load("@bazel_gazelle//:def.bzl", "gazelle")
 load("@pip//:requirements.bzl", "all_whl_requirements")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 load("@rules_python_gazelle_plugin//:def.bzl", "GAZELLE_PYTHON_RUNTIME_DEPS")
 load("@rules_python_gazelle_plugin//manifest:defs.bzl", "gazelle_python_manifest")
 load("@rules_python_gazelle_plugin//modules_mapping:def.bzl", "modules_mapping")
@@ -38,4 +39,24 @@ gazelle(
     name = "gazelle",
     data = GAZELLE_PYTHON_RUNTIME_DEPS,
     gazelle = "@rules_python_gazelle_plugin//python:gazelle_binary",
+)
+
+py_binary(
+    name = "build_action_scheduler",
+    srcs = ["build_action_scheduler.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@pip//pydantic",
+        "@pip//typer",
+    ],
+)
+
+py_library(
+    name = "build-action-scheduler",
+    srcs = ["build_action_scheduler.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@pip//pydantic",
+        "@pip//typer",
+    ],
 )

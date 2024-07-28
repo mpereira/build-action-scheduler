@@ -2,32 +2,8 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import Deque, Dict, List, Sequence, Tuple
 
-from pydantic import BaseModel, Field
+from org_fraggles.build_action_scheduler.types import Action, ActionDuration, Sha1
 
-Sha1 = str
-ActionDuration = int
-
-
-@dataclass
-class Action:
-    """The representation of a build action."""
-
-    sha1: Sha1
-    duration: ActionDuration
-    dependencies: List[Sha1]
-
-
-class ActionModel(BaseModel):
-    """Pydantic model for a build action.
-
-    Used for validation."""
-
-    sha1: Sha1 = Field(..., min_length=1)
-    duration: ActionDuration = Field(..., gt=0)
-    dependencies: List[Sha1] = []
-
-
-ActionPath = List[Sha1]
 ExecutionBatch = List[Action]
 BuildPlan = List[ExecutionBatch]
 

@@ -28,3 +28,6 @@ bazel_python_app_build:
 
 bazel_python_test:
 	@cd $(BAZEL_ROOT) && bazel test --test_output=all //$(BAZEL_NAMESPACE)/... -- $(ARGS)
+
+bazel_python_build:
+	@cd $(BAZEL_ROOT) && bazel build //$(BAZEL_NAMESPACE)/... -- $(ARGS)

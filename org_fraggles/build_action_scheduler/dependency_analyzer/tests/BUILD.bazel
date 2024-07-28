@@ -1,0 +1,12 @@
+load("@rules_python//python:defs.bzl", "py_test")
+
+py_test(
+    name = "test_cycle_detector",
+    srcs = ["test_cycle_detector.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//org_fraggles/build_action_scheduler:build_action_scheduler_lib",
+        "//org_fraggles/build_action_scheduler/types",
+        "@pip//pytest",
+    ],
+)

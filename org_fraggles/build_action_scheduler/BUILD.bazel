@@ -4,7 +4,7 @@ py_library(
     name = "build_action_scheduler_lib",
     srcs = ["__init__.py"],
     visibility = ["//:__subpackages__"],
-    deps = ["@pip//pydantic"],
+    deps = ["//org_fraggles/build_action_scheduler/types"],
 )
 
 py_binary(
@@ -13,7 +13,10 @@ py_binary(
     main = "__main__.py",
     visibility = ["//:__subpackages__"],
     deps = [
-        ":build_action_scheduler_lib",
+        "//org_fraggles/build_action_scheduler/dependency_analyzer",
+        "//org_fraggles/build_action_scheduler/executor",
+        "//org_fraggles/build_action_scheduler/scheduler",
+        "//org_fraggles/build_action_scheduler/types",
         "@pip//typer",
     ],
 )
