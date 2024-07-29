@@ -13,7 +13,7 @@ class ActionExecutor(BaseModel):
     # Actions info.
     actions_info: ActionsInfo
 
-    # Maximum number of actions to be executing in parallel at any given time.
+    # The maximum number of actions to be executing in parallel at any given time.
     parallelism: int
 
     # Thread pool executor for managing action execution

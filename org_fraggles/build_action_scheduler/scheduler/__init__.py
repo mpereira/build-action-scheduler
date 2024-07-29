@@ -1,6 +1,6 @@
-from typing import Any, Dict, List
+from typing import Any, Dict
 
-from pydantic import BaseModel
+from pydantic import BaseModel, PrivateAttr
 
 from org_fraggles.build_action_scheduler.actions_info import ActionsInfo
 from org_fraggles.build_action_scheduler.dependency_analyzer import (
@@ -10,11 +10,10 @@ from org_fraggles.build_action_scheduler.dependency_analyzer import (
     DependencyCycleError,
 )
 from org_fraggles.build_action_scheduler.executor import ActionExecutor
-from org_fraggles.build_action_scheduler.types import Action, Sha1
 
 
 class ActionScheduler(BaseModel):
-    # The maximum number of actions to execute in parallel.
+    # The maximum number of actions to be executing in parallel at any given time.
     parallelism: int
 
     # Actions info.
@@ -26,28 +25,18 @@ class ActionScheduler(BaseModel):
     # The dependency analyzer.
     dependency_analyzer: DependencyAnalyzer
 
-    def schedule(self) -> Dict[str, Any]:
-        """Schedules the actions for execution."""
-        action_cache = {}
-        action_executions = []
+    # Priority queue to store paths and their overall durations.
+    _critical_paths: CriticalPaths | None = PrivateAttr(default=None)
 
-        try:
-            critical_paths = self.dependency_analyzer.critical_paths()
-        except DependencyCycleError:
-            return {"error": "Dependency cycle detected"}
-
-        overall_critical_path = critical_paths.peek()
-
-        while not critical_paths.empty():
-            current_critical_path = critical_paths.pop()
+    def find_next_actions(self) -> None:
+        while not self._critical_paths.empty():
+            current_critical_path = self._critical_paths.pop()
             _, path = current_critical_path
 
             action_with_no_dependencies = path[0]
 
             if action_with_no_dependencies in action_cache:
-                self._acknowledge_critical_path_action_execution(
-                    critical_paths, current_critical_path
-                )
+                self._acknowledge_critical_path_action_execution(current_critical_path)
 
                 continue
 
@@ -59,9 +48,43 @@ class ActionScheduler(BaseModel):
             action_cache[action_with_no_dependencies] = result
             action_executions.append(action_with_no_dependencies)
 
-            self._acknowledge_critical_path_action_execution(
-                critical_paths, current_critical_path
-            )
+            self._acknowledge_critical_path_action_execution(current_critical_path)
+
+    def schedule(self) -> Dict[str, Any]:
+        """Schedules actions for execution."""
+        action_cache = {}
+        action_executions = []
+
+        try:
+            self._critical_paths = self.dependency_analyzer.critical_paths()
+        except DependencyCycleError:
+            return {"error": "Dependency cycle detected"}
+
+        if self._critical_paths is None:
+            return {"error": "Empty critical paths, probably no actions given"}
+
+        overall_critical_path = self._critical_paths.peek()
+
+        while not self._critical_paths.empty():
+            current_critical_path = self._critical_paths.pop()
+            _, path = current_critical_path
+
+            action_with_no_dependencies = path[0]
+
+            if action_with_no_dependencies in action_cache:
+                self._acknowledge_critical_path_action_execution(current_critical_path)
+
+                continue
+
+            # if self.action_executor.full():
+            #     # wait
+
+            result = self.action_executor.execute(action_with_no_dependencies)
+
+            action_cache[action_with_no_dependencies] = result
+            action_executions.append(action_with_no_dependencies)
+
+            self._acknowledge_critical_path_action_execution(current_critical_path)
 
         return {
             "linearizable_action_executions": action_executions,
@@ -72,14 +95,17 @@ class ActionScheduler(BaseModel):
         }
 
     def _acknowledge_critical_path_action_execution(
-        self, critical_paths: CriticalPaths, critical_path: CriticalPath
+        self, critical_path: CriticalPath
     ) -> None:
         """Removes the action at the head of the critical path (and its duration).
 
         Args:
-            critical_paths: The critical paths.
-            critical_path: The current critical path.
+            critical_path: The critical path whose first action's execution
+            should be acknowledged.
         """
+        if self._critical_paths is None:
+            return
+
         duration, path = critical_path
 
         # If the executed action is the last action in the path, then there is
@@ -89,7 +115,7 @@ class ActionScheduler(BaseModel):
 
         action_executed = path[0]
 
-        critical_paths.push(
+        self._critical_paths.push(
             (
                 duration - self.actions_info.actions_by_sha1[action_executed].duration,
                 path[1:],
