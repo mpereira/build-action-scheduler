@@ -34,7 +34,11 @@ def main(
         ),
     ],
     action_status_polling_interval_s: Annotated[
-        int, typer.Option(..., help="TODO")
+        int,
+        typer.Option(
+            ...,
+            help="The interval in seconds to poll for actions ready to be scheduled",
+        ),
     ] = 1,
 ) -> None:
     """Prints a JSON-formatted build report.

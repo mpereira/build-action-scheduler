@@ -56,19 +56,6 @@ class ActionScheduler(BaseModel):
     # A linear history of action execution ends.
     _action_execution_end_history: List[ActionSha1] = PrivateAttr(default_factory=list)
 
-    # TODO.
-    _action_execution_start_times: Dict[ActionSha1, Timestamp] = PrivateAttr(
-        default_factory=dict
-    )
-
-    # TODO.
-    _action_execution_end_times: Dict[ActionSha1, Timestamp] = PrivateAttr(
-        default_factory=dict
-    )
-
-    # Thread pool executor for managing action execution
-    _executor: ThreadPoolExecutor = PrivateAttr()
-
     _lock: Lock = PrivateAttr()
 
     def __init__(self, **data):
@@ -81,10 +68,80 @@ class ActionScheduler(BaseModel):
 
         self._lock = Lock()
 
-    def prepare_next_ready_actions(self) -> List[ActionSha1]:
+    def schedule(self) -> Dict[str, Any]:
+        """Schedules actions for execution, possibly in parallel.
+
+        Returns:
+            An error dict in case of errors, or a dict containing scheduling results.
+        """
+        ready_actions = deque([])
+
+        try:
+            self._critical_paths = self.dependency_analyzer.critical_paths()
+        except DependencyCycleError:
+            return {"error": "Dependency cycle detected"}
+
+        overall_critical_path = self._critical_paths.peek()
+
+        with ThreadPoolExecutor(max_workers=self.parallelism) as executor:
+            while not self._critical_paths.empty():
+                for action in self._prepare_next_ready_actions():
+                    ready_actions.appendleft(action)
+
+                actions_submitted = self._submit_as_many_as_possible(
+                    executor, ready_actions
+                )
+
+                if len(actions_submitted) == 0:
+                    self._log_current_status()
+                    time.sleep(self.action_status_polling_interval_s)
+
+                    continue
+
+        return {
+            "action_execution_history": self._action_execution_start_history,
+            "critical_path": {
+                "duration": overall_critical_path[0],
+                "path": overall_critical_path[1],
+            },
+        }
+
+    def execute(self, action_sha1: ActionSha1) -> ActionDuration:
+        """Executes a given action.
+
+        For now, all actions are "sleep" actions, so executing them means
+        sleeping for their duration.
+
+        Args:
+            action: The action to execute.
+
+        Returns:
+            The duration of the action.
+        """
+        self._on_action_execution_start(action_sha1)
+
+        duration = self.actions_info.actions_by_sha1[action_sha1].duration
+        time.sleep(duration)
+
+        self._on_action_execution_done(action_sha1, duration)
+
+        return duration
+
+    def _prepare_next_ready_actions(self) -> List[ActionSha1]:
+        """Iterates over the critical paths and returns the actions that are ready to be executed.
+
+        Actions are ready to be executed if they have no pending dependencies.
+
+        Returns:
+            A list of actions that are ready to be executed.
+        """
         ready_actions = []
+        # NOTE: using a set in conjunction with a list to ensure that there are
+        # no duplicates in the returned actions.
         ready_actions_set = set()
 
+        # These will be paths whose first action is not ready to be executed
+        # yet.
         critical_paths_not_ready = []
 
         while not self._critical_paths.empty():
@@ -115,44 +172,6 @@ class ActionScheduler(BaseModel):
 
         return ready_actions
 
-    def schedule(self) -> Dict[str, Any]:
-        """Schedules actions for execution.
-
-        Returns:
-            An error dict in case of errors, or a dict containing scheduling results.
-        """
-        ready_actions = deque([])
-
-        try:
-            self._critical_paths = self.dependency_analyzer.critical_paths()
-        except DependencyCycleError:
-            return {"error": "Dependency cycle detected"}
-
-        overall_critical_path = self._critical_paths.peek()
-
-        with ThreadPoolExecutor(max_workers=self.parallelism) as executor:
-            while not self._critical_paths.empty():
-                for action in self.prepare_next_ready_actions():
-                    ready_actions.appendleft(action)
-
-                actions_submitted = self._submit_as_many_as_possible(
-                    executor, ready_actions
-                )
-
-                if len(actions_submitted) == 0:
-                    self._log_current_status()
-                    time.sleep(self.action_status_polling_interval_s)
-
-                    continue
-
-        return {
-            "action_execution_history": self._action_execution_start_history,
-            "critical_path": {
-                "duration": overall_critical_path[0],
-                "path": overall_critical_path[1],
-            },
-        }
-
     def _submit_as_many_as_possible(
         self, executor: ThreadPoolExecutor, action_sha1s: Deque[ActionSha1]
     ) -> List[ActionSha1]:
@@ -178,27 +197,6 @@ class ActionScheduler(BaseModel):
             executor.submit(self.execute, action_to_run)
 
         return actions_to_run
-
-    def execute(self, action_sha1: ActionSha1) -> ActionDuration:
-        """Executes a given action.
-
-        For now, all actions are "sleep" actions, so executing them means
-        sleeping for their duration.
-
-        Args:
-            action: The action to execute.
-
-        Returns:
-            The duration of the action.
-        """
-        self._on_action_execution_start(action_sha1)
-
-        duration = self.actions_info.actions_by_sha1[action_sha1].duration
-        time.sleep(duration)
-
-        self._on_action_execution_done(action_sha1, duration)
-
-        return duration
 
     def _on_action_execution_start(self, action_sha1: ActionSha1) -> None:
         """Callback function to be called when an action execution is started.
