@@ -47,10 +47,9 @@ class ActionScheduler(BaseModel):
             action_with_no_dependencies = path[0]
 
             if action_with_no_dependencies in action_cache:
-                if len(path) > 1:
-                    self._acknowledge_critical_path_action_execution(
-                        critical_paths, current_critical_path
-                    )
+                self._acknowledge_critical_path_action_execution(
+                    critical_paths, current_critical_path
+                )
 
                 continue
 
@@ -62,10 +61,9 @@ class ActionScheduler(BaseModel):
             action_cache[action_with_no_dependencies] = result
             action_executions.append(action_with_no_dependencies)
 
-            if len(path) > 1:
-                self._acknowledge_critical_path_action_execution(
-                    critical_paths, current_critical_path
-                )
+            self._acknowledge_critical_path_action_execution(
+                critical_paths, current_critical_path
+            )
 
         return {
             "linearizable_action_executions": action_executions,
@@ -85,7 +83,14 @@ class ActionScheduler(BaseModel):
             critical_path: The current critical path.
         """
         duration, path = critical_path
+
+        # If the executed action is the last action in the path, then there is
+        # no need to re-add the path's tail to the critical paths.
+        if len(path) == 1:
+            return
+
         action_executed = path[0]
+
         critical_paths.push(
             (
                 duration - self.actions_by_sha1[action_executed].duration,
