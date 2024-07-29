@@ -1,11 +1,4 @@
-load("@rules_python//python:defs.bzl", "py_binary", "py_library")
-
-py_library(
-    name = "build_action_scheduler_lib",
-    srcs = ["__init__.py"],
-    visibility = ["//:__subpackages__"],
-    deps = ["//org_fraggles/build_action_scheduler/types"],
-)
+load("@rules_python//python:defs.bzl", "py_binary")
 
 py_binary(
     name = "build_action_scheduler_bin",
@@ -13,6 +6,7 @@ py_binary(
     main = "__main__.py",
     visibility = ["//:__subpackages__"],
     deps = [
+        "//org_fraggles/build_action_scheduler/actions_info",
         "//org_fraggles/build_action_scheduler/dependency_analyzer",
         "//org_fraggles/build_action_scheduler/executor",
         "//org_fraggles/build_action_scheduler/scheduler",

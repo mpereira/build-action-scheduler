@@ -5,6 +5,7 @@ from typing import Dict, Set
 
 import typer
 
+from org_fraggles.build_action_scheduler.actions_info import ActionsInfo
 from org_fraggles.build_action_scheduler.dependency_analyzer import DependencyAnalyzer
 from org_fraggles.build_action_scheduler.executor import ActionExecutor
 from org_fraggles.build_action_scheduler.scheduler import ActionScheduler
@@ -34,31 +35,18 @@ def main(
 
     actions = [Action(**action.dict()) for action in action_models]
 
-    actions_by_sha1: Dict[Sha1, Action] = {action.sha1: action for action in actions}
-
-    action_dependents: Dict[Sha1, Set[Sha1]] = defaultdict(set)
-
-    for action in actions:
-        for dep in action.dependencies:
-            if dep not in action_dependents:
-                action_dependents[dep] = set()
-            action_dependents[dep].add(action.sha1)
+    actions_info = ActionsInfo(actions=actions)
 
     action_executor = ActionExecutor(
         parallelism=parallelism,
-        actions_by_sha1=actions_by_sha1,
+        actions_info=actions_info,
     )
 
-    dependency_analyzer = DependencyAnalyzer(
-        actions_by_sha1=actions_by_sha1,
-        action_dependents=action_dependents,
-    )
+    dependency_analyzer = DependencyAnalyzer(actions_info=actions_info)
 
     build_report = ActionScheduler(
         parallelism=parallelism,
-        actions=actions,
-        actions_by_sha1=actions_by_sha1,
-        action_dependents=action_dependents,
+        actions_info=actions_info,
         action_executor=action_executor,
         dependency_analyzer=dependency_analyzer,
     ).schedule()

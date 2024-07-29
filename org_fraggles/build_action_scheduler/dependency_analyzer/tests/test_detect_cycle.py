@@ -2,7 +2,8 @@ import sys
 
 import pytest
 
-from org_fraggles.build_action_scheduler.cycle_detector import CycleDetector
+from org_fraggles.build_action_scheduler.actions_info import ActionsInfo
+from org_fraggles.build_action_scheduler.dependency_analyzer import DependencyAnalyzer
 from org_fraggles.build_action_scheduler.types import Action
 
 
@@ -13,9 +14,9 @@ def test_no_cycle():
         Action(sha1="c", duration=30, dependencies=["b"]),
         Action(sha1="d", duration=40, dependencies=["c"]),
     ]
-    actions_by_sha1 = {action.sha1: action for action in actions}
-    cycle_detector = CycleDetector(actions_by_sha1)
-    assert not cycle_detector.detect_cycle()
+    actions_info = ActionsInfo(actions=actions)
+    dependency_analyzer = DependencyAnalyzer(actions_info=actions_info)
+    assert not dependency_analyzer.detect_cycle()
 
 
 def test_single_cycle():
@@ -24,9 +25,9 @@ def test_single_cycle():
         Action(sha1="b", duration=20, dependencies=["c"]),
         Action(sha1="c", duration=30, dependencies=["a"]),
     ]
-    actions_by_sha1 = {action.sha1: action for action in actions}
-    cycle_detector = CycleDetector(actions_by_sha1)
-    assert cycle_detector.detect_cycle()
+    actions_info = ActionsInfo(actions=actions)
+    dependency_analyzer = DependencyAnalyzer(actions_info=actions_info)
+    assert dependency_analyzer.detect_cycle()
 
 
 def test_multiple_cycles():
@@ -38,9 +39,9 @@ def test_multiple_cycles():
         Action(sha1="e", duration=50, dependencies=["f"]),
         Action(sha1="f", duration=60, dependencies=["d"]),
     ]
-    actions_by_sha1 = {action.sha1: action for action in actions}
-    cycle_detector = CycleDetector(actions_by_sha1)
-    assert cycle_detector.detect_cycle()
+    actions_info = ActionsInfo(actions=actions)
+    dependency_analyzer = DependencyAnalyzer(actions_info=actions_info)
+    assert dependency_analyzer.detect_cycle()
 
 
 def test_larger_graph_with_cycle():
@@ -52,9 +53,9 @@ def test_larger_graph_with_cycle():
         Action(sha1="e", duration=50, dependencies=["b"]),  # Cycle here.
         Action(sha1="f", duration=60, dependencies=[]),
     ]
-    actions_by_sha1 = {action.sha1: action for action in actions}
-    cycle_detector = CycleDetector(actions_by_sha1)
-    assert cycle_detector.detect_cycle()
+    actions_info = ActionsInfo(actions=actions)
+    dependency_analyzer = DependencyAnalyzer(actions_info=actions_info)
+    assert dependency_analyzer.detect_cycle()
 
 
 def test_larger_graph_without_cycle():
@@ -66,9 +67,9 @@ def test_larger_graph_without_cycle():
         Action(sha1="e", duration=50, dependencies=[]),
         Action(sha1="f", duration=60, dependencies=[]),
     ]
-    actions_by_sha1 = {action.sha1: action for action in actions}
-    cycle_detector = CycleDetector(actions_by_sha1)
-    assert not cycle_detector.detect_cycle()
+    actions_info = ActionsInfo(actions=actions)
+    dependency_analyzer = DependencyAnalyzer(actions_info=actions_info)
+    assert not dependency_analyzer.detect_cycle()
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ py_library(
     srcs = ["__init__.py"],
     visibility = ["//:__subpackages__"],
     deps = [
+        "//org_fraggles/build_action_scheduler/actions_info",
         "//org_fraggles/build_action_scheduler/types",
         "@pip//pydantic",
     ],

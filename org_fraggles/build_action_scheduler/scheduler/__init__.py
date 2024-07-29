@@ -2,6 +2,7 @@ from typing import Any, Dict, List
 
 from pydantic import BaseModel
 
+from org_fraggles.build_action_scheduler.actions_info import ActionsInfo
 from org_fraggles.build_action_scheduler.dependency_analyzer import (
     CriticalPath,
     CriticalPaths,
@@ -16,11 +17,8 @@ class ActionScheduler(BaseModel):
     # The maximum number of actions to execute in parallel.
     parallelism: int
 
-    # The actions to schedule and execute.
-    actions: List[Action]
-
-    # Mapping of SHA-1 strings to action objects.
-    actions_by_sha1: Dict[Sha1, Action]
+    # Actions info.
+    actions_info: ActionsInfo
 
     # The action executor.
     action_executor: ActionExecutor
@@ -93,7 +91,7 @@ class ActionScheduler(BaseModel):
 
         critical_paths.push(
             (
-                duration - self.actions_by_sha1[action_executed].duration,
+                duration - self.actions_info.actions_by_sha1[action_executed].duration,
                 path[1:],
             )
         )

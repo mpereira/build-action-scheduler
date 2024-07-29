@@ -1,21 +1,17 @@
 from queue import PriorityQueue
-from typing import Any, Dict, Set, Tuple
+from typing import Tuple
 
 from pydantic import BaseModel, PrivateAttr
 
-from org_fraggles.build_action_scheduler.types import Action, ActionPath, Sha1
+from org_fraggles.build_action_scheduler.actions_info import ActionsInfo
+from org_fraggles.build_action_scheduler.types import ActionPath
 
 CriticalPath = Tuple[int, ActionPath]
 
 
 class CriticalPaths(BaseModel):
-    # Mapping of SHA-1 strings to action objects.
-    actions_by_sha1: Dict[Sha1, Action]
-
-    # An inverse mapping of dependencies to dependents.
-    #
-    # E.g., if both 'B' and 'C' depend on 'A', then {'A': {'B', 'C'}}
-    action_dependents: Dict[Sha1, Set[Sha1]]
+    # Actions info.
+    actions_info: ActionsInfo
 
     # Priority queue to store paths and their durations.
     _critical_paths: PriorityQueue = PrivateAttr()
@@ -65,17 +61,20 @@ class CriticalPaths(BaseModel):
         """
         self._critical_paths = PriorityQueue()
 
-        all_actions = set(self.actions_by_sha1.keys())
+        all_actions = set(self.actions_info.actions_by_sha1.keys())
         actions_with_dependencies = set(
             action_sha1
-            for action_sha1, action in self.actions_by_sha1.items()
+            for action_sha1, action in self.actions_info.actions_by_sha1.items()
             if action.dependencies
         )
         leaf_actions = all_actions - actions_with_dependencies
 
         for leaf_action_sha1 in leaf_actions:
             self._critical_paths.put(
-                (self.actions_by_sha1[leaf_action_sha1].duration, [leaf_action_sha1])
+                (
+                    self.actions_info.actions_by_sha1[leaf_action_sha1].duration,
+                    [leaf_action_sha1],
+                )
             )
 
         all_paths = []
@@ -84,12 +83,14 @@ class CriticalPaths(BaseModel):
             duration, path = self._critical_paths.get()
             path_last_action = path[-1]
 
-            if path_last_action in self.action_dependents:
+            if path_last_action in self.actions_info.action_dependents:
                 # Some action depends on this action, so it is between the leaf
                 # and the root. Add it to the path and increment the path
                 # duration with its duration.
-                for dependent in self.action_dependents[path_last_action]:
-                    new_duration = duration + self.actions_by_sha1[dependent].duration
+                for dependent in self.actions_info.action_dependents[path_last_action]:
+                    new_duration = (
+                        duration + self.actions_info.actions_by_sha1[dependent].duration
+                    )
                     new_path = path + [dependent]
                     self._critical_paths.put((new_duration, new_path))
             else:
@@ -114,13 +115,8 @@ class DependencyCycleError(DependencyAnalyzerError):
 
 
 class DependencyAnalyzer(BaseModel):
-    # Mapping of SHA-1 strings to action objects.
-    actions_by_sha1: Dict[Sha1, Action]
-
-    # An inverse mapping of dependencies to dependents.
-    #
-    # E.g., if both 'B' and 'C' depend on 'A', then {'A': {'B', 'C'}}
-    action_dependents: Dict[Sha1, Set[Sha1]]
+    # Actions info.
+    actions_info: ActionsInfo
 
     # Priority queue to store paths and their overall durations.
     _critical_paths: CriticalPaths | None = PrivateAttr(default=None)
@@ -140,10 +136,7 @@ class DependencyAnalyzer(BaseModel):
         if self.detect_cycle():
             raise DependencyCycleError("There is a dependency cycle")
 
-        self._critical_paths = CriticalPaths(
-            actions_by_sha1=self.actions_by_sha1,
-            action_dependents=self.action_dependents,
-        )
+        self._critical_paths = CriticalPaths(actions_info=self.actions_info)
 
         return self._critical_paths
 
@@ -166,7 +159,9 @@ class DependencyAnalyzer(BaseModel):
             visited.add(action_sha1)
             action_path.add(action_sha1)
 
-            for dependency_sha1 in self.actions_by_sha1[action_sha1].dependencies:
+            for dependency_sha1 in self.actions_info.actions_by_sha1[
+                action_sha1
+            ].dependencies:
                 if dfs(dependency_sha1):
                     return True
 
@@ -174,7 +169,7 @@ class DependencyAnalyzer(BaseModel):
 
             return False
 
-        for action_sha1 in self.actions_by_sha1:
+        for action_sha1 in self.actions_info.actions_by_sha1:
             if action_sha1 not in visited:
                 if dfs(action_sha1):
                     return True

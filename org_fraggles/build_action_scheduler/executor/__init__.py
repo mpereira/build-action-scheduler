@@ -3,15 +3,17 @@ from typing import Dict
 
 from pydantic import BaseModel, PrivateAttr
 
+from org_fraggles.build_action_scheduler.actions_info import ActionsInfo
 from org_fraggles.build_action_scheduler.types import Action, Sha1
 
 
 class ActionExecutor(BaseModel):
-    """A placeholder class for executing actions."""
+    """Execute actions."""
 
-    # Mapping of SHA-1 strings to action objects.
-    actions_by_sha1: Dict[Sha1, Action]
+    # Actions info.
+    actions_info: ActionsInfo
 
+    # Maximum number of actions to be executing in parallel at any given time.
     parallelism: int
 
     # Thread pool executor for managing action execution
