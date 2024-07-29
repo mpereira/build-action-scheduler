@@ -32,7 +32,6 @@ def main(
     # Validate JSON data.
     action_models = [ActionModel(**action) for action in actions_data]
 
-    # Get action objects.
     actions = [Action(**action.dict()) for action in action_models]
 
     actions_by_sha1: Dict[Sha1, Action] = {action.sha1: action for action in actions}
@@ -45,14 +44,16 @@ def main(
                 action_dependents[dep] = set()
             action_dependents[dep].add(action.sha1)
 
-    action_executor = ActionExecutor(parallelism=parallelism)
+    action_executor = ActionExecutor(
+        parallelism=parallelism,
+        actions_by_sha1=actions_by_sha1,
+    )
 
     dependency_analyzer = DependencyAnalyzer(
         actions_by_sha1=actions_by_sha1,
         action_dependents=action_dependents,
     )
 
-    # Schedule and print build.
     build_report = ActionScheduler(
         parallelism=parallelism,
         actions=actions,
@@ -62,22 +63,7 @@ def main(
         dependency_analyzer=dependency_analyzer,
     ).schedule()
 
-    # execution_batches = [[asdict(a) for a in b] for b in build_report.execution_batches]
-    # ordered_action_executions = [
-    #     asdict(a) for b in build_report.execution_batches for a in b
-    # ]
-
-    # print(
-    #     json.dumps(
-    #         {
-    #             "execution_batches": execution_batches,
-    #             "ordered_action_executions": ordered_action_executions,
-    #             "critical_path": build_report.critical_path,
-    #             "critical_path_duration": build_report.critical_path_duration,
-    #         },
-    #         indent=2,
-    #     )
-    # )
+    print(json.dumps(build_report, indent=2))
 
 
 if __name__ == "__main__":

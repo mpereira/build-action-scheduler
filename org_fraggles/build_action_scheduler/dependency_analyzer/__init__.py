@@ -1,9 +1,11 @@
 from queue import PriorityQueue
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any, Dict, Set, Tuple
 
 from pydantic import BaseModel, PrivateAttr
 
 from org_fraggles.build_action_scheduler.types import Action, Sha1
+
+CriticalPath = Tuple[int, Any]
 
 
 class CriticalPaths(BaseModel):
@@ -16,60 +18,70 @@ class CriticalPaths(BaseModel):
     action_dependents: Dict[Sha1, Set[Sha1]]
 
     # Priority queue to store paths and their durations.
-    _priority_queue: PriorityQueue = PrivateAttr()
+    _critical_paths: PriorityQueue = PrivateAttr()
 
     def __init__(self, **data):
         super().__init__(**data)
-
-        self._priority_queue = PriorityQueue()
-
-        all_actions = set(self.actions_by_sha1.keys())
-        actions_with_dependencies = set(
-            dep for deps in self.action_dependents.values() for dep in deps
-        )
-        starting_nodes = all_actions - actions_with_dependencies
-
-        # Enqueue initial paths from starting nodes.
-        for start_action_sha1 in starting_nodes:
-            self._priority_queue.put(
-                (self.actions_by_sha1[start_action_sha1].duration, [start_action_sha1])
-            )
-
-        terminal_paths = []
-        while not self._priority_queue.empty():
-            current_duration, path = self._priority_queue.get()
-            last_node = path[-1]
-
-            if last_node not in self.action_dependents:
-                terminal_paths.append((current_duration, path))
-            else:
-                for neighbor in self.action_dependents[last_node]:
-                    new_duration = (
-                        current_duration + self.actions_by_sha1[neighbor].duration
-                    )
-                    new_path = path + [neighbor]
-                    self._priority_queue.put((new_duration, new_path))
-
-        # Enqueue terminal paths back into the priority queue
-        for duration, path in terminal_paths:
-            self._priority_queue.put((-1 * duration, path))
+        self._initialize_critical_paths()
 
     def empty(self) -> bool:
-        return self._priority_queue.empty()
+        return self._critical_paths.empty()
 
-    def current_most_critical(self) -> Optional[Tuple[int, Any]]:
-        v = self._priority_queue.get()
+    def peek(self) -> CriticalPath | None:
+        critical_path = self.pop()
+        if critical_path:
+            self.push(critical_path)
+        return critical_path
+
+    def pop(self) -> CriticalPath | None:
+        v = self._critical_paths.get()
 
         if v is None:
             return None
 
         return (v[0] * -1, v[1])
 
+    def push(self, duration_and_path: CriticalPath) -> None:
+        return self._critical_paths.put(
+            (duration_and_path[0] * -1, duration_and_path[1])
+        )
+
+    def _initialize_critical_paths(self) -> None:
+        """Initializes the priority queue with the (path duration, path) tuples."""
+        self._critical_paths = PriorityQueue()
+
+        all_actions = set(self.actions_by_sha1.keys())
+        actions_with_dependencies = set(
+            dep for deps in self.action_dependents.values() for dep in deps
+        )
+        leaf_actions = all_actions - actions_with_dependencies
+
+        for leaf_action_sha1 in leaf_actions:
+            self._critical_paths.put(
+                (self.actions_by_sha1[leaf_action_sha1].duration, [leaf_action_sha1])
+            )
+
+        paths_starting_with_leaves = []
+        while not self._critical_paths.empty():
+            duration, path = self._critical_paths.get()
+            path_last_action = path[-1]
+
+            if path_last_action not in self.action_dependents:
+                paths_starting_with_leaves.append((duration, path))
+            else:
+                for neighbor in self.action_dependents[path_last_action]:
+                    new_duration = duration + self.actions_by_sha1[neighbor].duration
+                    new_path = path + [neighbor]
+                    self._critical_paths.put((new_duration, new_path))
+
+        for duration, path in paths_starting_with_leaves:
+            self._critical_paths.put((-1 * duration, path))
+
 
 class DependencyAnalyzerError(Exception):
     """Parent exception for exceptions raised by the DependencyAnalyzer."""
 
-    def __init__(self, message: Optional[str] = "") -> None:
+    def __init__(self, message: str | None = "") -> None:
         """Creates an instance of DependencyAnalyzerError."""
         super().__init__(message)
 
@@ -88,7 +100,7 @@ class DependencyAnalyzer(BaseModel):
     action_dependents: Dict[Sha1, Set[Sha1]]
 
     # Priority queue to store paths and their durations.
-    _critical_paths: Optional[CriticalPaths] = PrivateAttr(default=None)
+    _critical_paths: CriticalPaths | None = PrivateAttr(default=None)
 
     def critical_paths(self) -> CriticalPaths:
         """Calculates the critical paths for the actions.
