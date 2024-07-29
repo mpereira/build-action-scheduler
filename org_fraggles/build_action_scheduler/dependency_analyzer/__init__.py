@@ -3,9 +3,9 @@ from typing import Any, Dict, Set, Tuple
 
 from pydantic import BaseModel, PrivateAttr
 
-from org_fraggles.build_action_scheduler.types import Action, Sha1
+from org_fraggles.build_action_scheduler.types import Action, ActionPath, Sha1
 
-CriticalPath = Tuple[int, Any]
+CriticalPath = Tuple[int, ActionPath]
 
 
 class CriticalPaths(BaseModel):
@@ -25,15 +25,18 @@ class CriticalPaths(BaseModel):
         self._initialize_critical_paths()
 
     def empty(self) -> bool:
+        """Returns True if the priority queue is empty, False otherwise."""
         return self._critical_paths.empty()
 
     def peek(self) -> CriticalPath | None:
+        """Returns the most critical path without removing it from the priority queue."""
         critical_path = self.pop()
         if critical_path:
             self.push(critical_path)
         return critical_path
 
     def pop(self) -> CriticalPath | None:
+        """Removes and returns the most critical path from the priority queue."""
         v = self._critical_paths.get()
 
         if v is None:
@@ -42,17 +45,31 @@ class CriticalPaths(BaseModel):
         return (v[0] * -1, v[1])
 
     def push(self, duration_and_path: CriticalPath) -> None:
+        """Pushes a path with its duration onto the priority queue.
+
+        Since priority queues are min-heaps, we negate the duration to get the
+        most critical path when popping.
+
+        Args:
+            duration_and_path: The duration and path to push onto the priority queue.
+        """
         return self._critical_paths.put(
             (duration_and_path[0] * -1, duration_and_path[1])
         )
 
     def _initialize_critical_paths(self) -> None:
-        """Initializes the priority queue with the (path duration, path) tuples."""
+        """Initializes the priority queue with the `(duration, path)` tuples.
+
+        All paths will have their first elements as leaf actions (no dependencies)
+        and last elements as root actions (no dependents).
+        """
         self._critical_paths = PriorityQueue()
 
         all_actions = set(self.actions_by_sha1.keys())
         actions_with_dependencies = set(
-            dep for deps in self.action_dependents.values() for dep in deps
+            action_sha1
+            for action_sha1, action in self.actions_by_sha1.items()
+            if action.dependencies
         )
         leaf_actions = all_actions - actions_with_dependencies
 
@@ -61,20 +78,26 @@ class CriticalPaths(BaseModel):
                 (self.actions_by_sha1[leaf_action_sha1].duration, [leaf_action_sha1])
             )
 
-        paths_starting_with_leaves = []
+        all_paths = []
+
         while not self._critical_paths.empty():
             duration, path = self._critical_paths.get()
             path_last_action = path[-1]
 
-            if path_last_action not in self.action_dependents:
-                paths_starting_with_leaves.append((duration, path))
-            else:
-                for neighbor in self.action_dependents[path_last_action]:
-                    new_duration = duration + self.actions_by_sha1[neighbor].duration
-                    new_path = path + [neighbor]
+            if path_last_action in self.action_dependents:
+                # Some action depends on this action, so it is between the leaf
+                # and the root. Add it to the path and increment the path
+                # duration with its duration.
+                for dependent in self.action_dependents[path_last_action]:
+                    new_duration = duration + self.actions_by_sha1[dependent].duration
+                    new_path = path + [dependent]
                     self._critical_paths.put((new_duration, new_path))
+            else:
+                # No action depends on this one, so we end the path and add it
+                # to the list.
+                all_paths.append((duration, path))
 
-        for duration, path in paths_starting_with_leaves:
+        for duration, path in all_paths:
             self._critical_paths.put((-1 * duration, path))
 
 
@@ -99,11 +122,11 @@ class DependencyAnalyzer(BaseModel):
     # E.g., if both 'B' and 'C' depend on 'A', then {'A': {'B', 'C'}}
     action_dependents: Dict[Sha1, Set[Sha1]]
 
-    # Priority queue to store paths and their durations.
+    # Priority queue to store paths and their overall durations.
     _critical_paths: CriticalPaths | None = PrivateAttr(default=None)
 
     def critical_paths(self) -> CriticalPaths:
-        """Calculates the critical paths for the actions.
+        """Calculates the critical paths and their overall durations.
 
         Returns:
             CriticalPaths: The critical paths for the actions.
@@ -124,7 +147,12 @@ class DependencyAnalyzer(BaseModel):
 
         return self._critical_paths
 
-    def detect_cycle(self):
+    def detect_cycle(self) -> bool:
+        """Returns True if there is a cycle in the dependency graph, False otherwise.
+
+        Uses depth-first search to detect cycles by checking if a node being
+        visited is already in the tree/graph path.
+        """
         visited = set()
         action_path = set()
 

@@ -54,6 +54,9 @@ class ActionScheduler(BaseModel):
 
                 continue
 
+            # if self.action_executor.full():
+            #     # wait
+
             result = self.action_executor.execute(action_with_no_dependencies)
 
             action_cache[action_with_no_dependencies] = result
@@ -74,7 +77,13 @@ class ActionScheduler(BaseModel):
 
     def _acknowledge_critical_path_action_execution(
         self, critical_paths: CriticalPaths, critical_path: CriticalPath
-    ):
+    ) -> None:
+        """Removes the action at the head of the critical path (and its duration).
+
+        Args:
+            critical_paths: The critical paths.
+            critical_path: The current critical path.
+        """
         duration, path = critical_path
         action_executed = path[0]
         critical_paths.push(
