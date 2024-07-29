@@ -7,7 +7,6 @@ py_library(
     deps = [
         "//org_fraggles/build_action_scheduler/actions_info",
         "//org_fraggles/build_action_scheduler/dependency_analyzer",
-        "//org_fraggles/build_action_scheduler/executor",
         "//org_fraggles/build_action_scheduler/types",
         "@pip//pydantic",
     ],

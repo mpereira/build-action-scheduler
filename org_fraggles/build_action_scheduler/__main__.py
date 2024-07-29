@@ -7,7 +7,6 @@ import typer
 
 from org_fraggles.build_action_scheduler.actions_info import ActionsInfo
 from org_fraggles.build_action_scheduler.dependency_analyzer import DependencyAnalyzer
-from org_fraggles.build_action_scheduler.executor import ActionExecutor
 from org_fraggles.build_action_scheduler.scheduler import ActionScheduler
 from org_fraggles.build_action_scheduler.types import Action, ActionModel
 
@@ -54,18 +53,12 @@ def main(
 
     actions_info = ActionsInfo(actions=actions)
 
-    action_executor = ActionExecutor(
-        parallelism=parallelism,
-        actions_info=actions_info,
-    )
-
     dependency_analyzer = DependencyAnalyzer(actions_info=actions_info)
 
     build_report = ActionScheduler(
         parallelism=parallelism,
         action_status_polling_interval_s=action_status_polling_interval_s,
         actions_info=actions_info,
-        action_executor=action_executor,
         dependency_analyzer=dependency_analyzer,
     ).schedule()
 

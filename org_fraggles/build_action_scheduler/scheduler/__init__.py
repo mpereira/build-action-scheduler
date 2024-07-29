@@ -1,9 +1,9 @@
 import logging
 import time
 from collections import defaultdict, deque
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
-from typing import Any, Deque, Dict, List, Set, Tuple
+from typing import Any, Deque, Dict, List, Set
 
 from pydantic import BaseModel, PrivateAttr
 
@@ -14,8 +14,7 @@ from org_fraggles.build_action_scheduler.dependency_analyzer import (
     DependencyAnalyzer,
     DependencyCycleError,
 )
-from org_fraggles.build_action_scheduler.executor import ActionExecutor
-from org_fraggles.build_action_scheduler.types import Sha1
+from org_fraggles.build_action_scheduler.types import ActionDuration, ActionSha1
 
 log = logging.getLogger(__name__)
 
@@ -32,36 +31,38 @@ class ActionScheduler(BaseModel):
     # Actions info.
     actions_info: ActionsInfo
 
-    # The action executor.
-    action_executor: ActionExecutor
-
     # The dependency analyzer.
     dependency_analyzer: DependencyAnalyzer
 
     # Priority queue to store paths and their overall durations.
     _critical_paths: CriticalPaths = PrivateAttr(default=None)
 
-    # TODO.
-    _action_pending_dependencies_count: Dict[Sha1, int] = PrivateAttr(
+    # Keeps track of the number of pending dependencies for each action.
+    _action_pending_dependencies_count: Dict[ActionSha1, int] = PrivateAttr(
         default=defaultdict(int)
     )
 
-    # TODO.
-    _action_cache: Dict[Sha1, Any] = PrivateAttr(default_factory=dict)
+    # Holds the results for actions that have been executed.
+    _action_cache: Dict[ActionSha1, Any] = PrivateAttr(default_factory=dict)
 
     # Actions that are running at a certain time.
-    _actions_running: Set[Sha1] = PrivateAttr(default_factory=set)
+    _actions_running: Set[ActionSha1] = PrivateAttr(default_factory=set)
+
+    # A linear history of action execution starts.
+    _action_execution_start_history: List[ActionSha1] = PrivateAttr(
+        default_factory=list
+    )
+
+    # A linear history of action execution ends.
+    _action_execution_end_history: List[ActionSha1] = PrivateAttr(default_factory=list)
 
     # TODO.
-    _action_execution_start_history: List[Sha1] = PrivateAttr(default_factory=list)
-
-    # TODO.
-    _action_execution_start_times: Dict[Sha1, Timestamp] = PrivateAttr(
+    _action_execution_start_times: Dict[ActionSha1, Timestamp] = PrivateAttr(
         default_factory=dict
     )
 
     # TODO.
-    _action_execution_end_times: Dict[Sha1, Timestamp] = PrivateAttr(
+    _action_execution_end_times: Dict[ActionSha1, Timestamp] = PrivateAttr(
         default_factory=dict
     )
 
@@ -80,7 +81,7 @@ class ActionScheduler(BaseModel):
 
         self._lock = Lock()
 
-    def prepare_next_ready_actions(self) -> List[Sha1]:
+    def prepare_next_ready_actions(self) -> List[ActionSha1]:
         ready_actions = []
         ready_actions_set = set()
 
@@ -112,11 +113,14 @@ class ActionScheduler(BaseModel):
             for critical_path in critical_paths_not_ready:
                 self._critical_paths.push(critical_path)
 
-        log.info(f"Ready actions: {ready_actions}")
         return ready_actions
 
     def schedule(self) -> Dict[str, Any]:
-        """Schedules actions for execution."""
+        """Schedules actions for execution.
+
+        Returns:
+            An error dict in case of errors, or a dict containing scheduling results.
+        """
         ready_actions = deque([])
 
         try:
@@ -136,13 +140,7 @@ class ActionScheduler(BaseModel):
                 )
 
                 if len(actions_submitted) == 0:
-                    actions_running_prefix = ": " if self._actions_running else ""
-                    log.info(
-                        "Sleeping for %ss (%s actions running%s)",
-                        self.action_status_polling_interval_s,
-                        len(self._actions_running),
-                        f"{actions_running_prefix}{", ".join(self._actions_running)}",
-                    )
+                    self._log_current_status()
                     time.sleep(self.action_status_polling_interval_s)
 
                     continue
@@ -156,8 +154,17 @@ class ActionScheduler(BaseModel):
         }
 
     def _submit_as_many_as_possible(
-        self, executor: ThreadPoolExecutor, action_sha1s: Deque[Sha1]
-    ) -> List[Sha1]:
+        self, executor: ThreadPoolExecutor, action_sha1s: Deque[ActionSha1]
+    ) -> List[ActionSha1]:
+        """Submits as many actions as possible to the executor based on its current capacity.
+
+        Args:
+            executor: The executor to submit actions to.
+            action_sha1s: The actions to submit.
+
+        Returns:
+            The list of actions that have been submitted.
+        """
         current_capacity = self.parallelism - len(self._actions_running)
 
         actions_to_run = []
@@ -172,11 +179,17 @@ class ActionScheduler(BaseModel):
 
         return actions_to_run
 
-    def execute(self, action_sha1: Sha1) -> int:
-        """Executes the given action.
+    def execute(self, action_sha1: ActionSha1) -> ActionDuration:
+        """Executes a given action.
+
+        For now, all actions are "sleep" actions, so executing them means
+        sleeping for their duration.
 
         Args:
-            action (Action): The action to execute.
+            action: The action to execute.
+
+        Returns:
+            The duration of the action.
         """
         self._on_action_execution_start(action_sha1)
 
@@ -187,21 +200,33 @@ class ActionScheduler(BaseModel):
 
         return duration
 
-    def _on_action_execution_start(self, action_sha1: Sha1) -> None:
+    def _on_action_execution_start(self, action_sha1: ActionSha1) -> None:
+        """Callback function to be called when an action execution is started.
+
+        Args:
+            action_sha1: The SHA-1 of the action that has been started.
+        """
         with self._lock:
             # Add action to the set of running actions.
             self._actions_running.add(action_sha1)
 
-            # Record action execution in linearizable history.
+            # Record action execution start in linearizable history.
             self._action_execution_start_history.append(action_sha1)
 
-    def _on_action_execution_done(self, action_sha1: Sha1, action_output: Any) -> None:
+            self._log_current_status()
+
+    def _on_action_execution_done(
+        self, action_sha1: ActionSha1, action_output: Any
+    ) -> None:
         """Callback function to be called when an action execution is done.
 
         Args:
             action_sha1: The SHA-1 of the action that has been executed.
         """
         with self._lock:
+            # Record action execution end in linearizable history.
+            self._action_execution_end_history.append(action_sha1)
+
             # Cache the result of the action.
             self._action_cache[action_sha1] = action_output
 
@@ -211,6 +236,8 @@ class ActionScheduler(BaseModel):
             # Decrement the pending dependencies count for all dependents of the action.
             for dependent in self.actions_info.action_dependents[action_sha1]:
                 self._action_pending_dependencies_count[dependent] -= 1
+
+            self._log_current_status()
 
     def _reinsert_critical_path_tail(self, critical_path: CriticalPath) -> None:
         """Removes the action at the head of the critical path (and its duration).
@@ -233,4 +260,17 @@ class ActionScheduler(BaseModel):
                 duration - self.actions_info.actions_by_sha1[action_executed].duration,
                 path[1:],
             )
+        )
+
+    def _log_current_status(self) -> None:
+        """Logs the currently running and currently done actions."""
+        actions_running_prefix = ": " if self._actions_running else ""
+        actions_done_prefix = (
+            " | actions done: " if self._action_execution_end_history else ""
+        )
+        log.info(
+            "%s actions running%s%s",
+            len(self._actions_running),
+            f"{actions_running_prefix}{", ".join(self._actions_running)}",
+            f"{actions_done_prefix}{", ".join(self._action_execution_end_history)}",
         )
