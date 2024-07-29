@@ -14,6 +14,8 @@ class ActionsInfo(BaseModel):
 
     _actions_dependents: Dict[Sha1, Set[Sha1]] | None = PrivateAttr(default=None)
 
+    _action_dependencies_count: Dict[Sha1, int] = PrivateAttr(default=defaultdict(int))
+
     @property
     def actions_by_sha1(self) -> Dict[Sha1, Action]:
         """Returns a mapping of SHA-1 strings to action objects."""
@@ -40,3 +42,13 @@ class ActionsInfo(BaseModel):
             self._actions_dependents = action_dependents
 
         return self._actions_dependents
+
+    @property
+    def action_dependencies_count(self) -> Dict[Sha1, int]:
+        """Returns a mapping of SHA-1 strings to the number of dependencies each action has."""
+        if len(self._action_dependencies_count) == 0:
+            for action in self.actions:
+                print(f"building action {action.sha1}: {len(action.dependencies)}")
+                self._action_dependencies_count[action.sha1] = len(action.dependencies)
+
+        return self._action_dependencies_count

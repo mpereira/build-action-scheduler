@@ -1,7 +1,7 @@
 import json
-from collections import defaultdict
-from dataclasses import asdict
-from typing import Dict, Set
+import logging
+import time
+from typing import Annotated
 
 import typer
 
@@ -9,17 +9,34 @@ from org_fraggles.build_action_scheduler.actions_info import ActionsInfo
 from org_fraggles.build_action_scheduler.dependency_analyzer import DependencyAnalyzer
 from org_fraggles.build_action_scheduler.executor import ActionExecutor
 from org_fraggles.build_action_scheduler.scheduler import ActionScheduler
-from org_fraggles.build_action_scheduler.types import Action, ActionModel, Sha1
+from org_fraggles.build_action_scheduler.types import Action, ActionModel
+
+log = logging.getLogger(__name__)
+
+logging.Formatter.converter = time.gmtime
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%SZ",
+)
 
 
 def main(
-    parallelism: int = typer.Option(
-        ..., help="The maximum number of actions to execute in parallel."
-    ),
-    actions_file: str = typer.Option(
-        ...,
-        help="The path to the JSON file containing the list of actions to schedule.",
-    ),
+    parallelism: Annotated[
+        int,
+        typer.Option(..., help="The maximum number of actions to execute in parallel."),
+    ],
+    actions_file: Annotated[
+        str,
+        typer.Option(
+            ...,
+            help="The path to the JSON file containing the list of actions to schedule.",
+        ),
+    ],
+    action_status_polling_interval_s: Annotated[
+        int, typer.Option(..., help="TODO")
+    ] = 1,
 ) -> None:
     """Prints a JSON-formatted build report.
 
@@ -46,6 +63,7 @@ def main(
 
     build_report = ActionScheduler(
         parallelism=parallelism,
+        action_status_polling_interval_s=action_status_polling_interval_s,
         actions_info=actions_info,
         action_executor=action_executor,
         dependency_analyzer=dependency_analyzer,

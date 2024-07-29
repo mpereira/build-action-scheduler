@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict
+from threading import Lock
+from typing import Deque, Dict, Set
 
 from pydantic import BaseModel, PrivateAttr
 
@@ -16,13 +17,21 @@ class ActionExecutor(BaseModel):
     # The maximum number of actions to be executing in parallel at any given time.
     parallelism: int
 
+    # Actions that are running at a certain time.
+    _actions_running: Set[Sha1] = PrivateAttr()
+
     # Thread pool executor for managing action execution
     _executor: ThreadPoolExecutor = PrivateAttr()
+
+    _lock: Lock = PrivateAttr()
 
     def __init__(self, **data):
         super().__init__(**data)
         self._executor = ThreadPoolExecutor(max_workers=self.parallelism)
         self._executor.submit
+
+    def submit_as_many_as_possible(self, action_sha1s: Deque[Sha1]) -> int:
+        return len(action_sha1s)
 
     def execute(self, action: Action) -> None:
         """Executes the given action.
