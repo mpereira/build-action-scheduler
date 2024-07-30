@@ -25,3 +25,9 @@ bazel_python_format_files: bazel_gazelle bazel_buildifier bazel_isort bazel_blac
 
 bazel_python_app_build:
 	@cd $(BAZEL_ROOT) && bazel build --build_python_zip //$(BAZEL_NAMESPACE)/$(BAZEL_APP):$(BAZEL_APP)_bin -- $(ARGS)
+
+bazel_python_test:
+	@cd $(BAZEL_ROOT) && bazel test --test_output=all //$(BAZEL_NAMESPACE)/... -- $(ARGS)
+
+bazel_python_build:
+	@cd $(BAZEL_ROOT) && bazel build //$(BAZEL_NAMESPACE)/... -- $(ARGS)

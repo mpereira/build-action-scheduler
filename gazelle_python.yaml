@@ -57,6 +57,8 @@ manifest:
     click.testing: click
     click.types: click
     click.utils: click
+    iniconfig: iniconfig
+    iniconfig.exceptions: iniconfig
     isort: isort
     isort.api: isort
     isort.comments: isort
@@ -184,6 +186,8 @@ manifest:
     platformdirs.unix: platformdirs
     platformdirs.version: platformdirs
     platformdirs.windows: platformdirs
+    pluggy: pluggy
+    py: pytest
     pydantic: pydantic
     pydantic.alias_generators: pydantic
     pydantic.aliases: pydantic
@@ -551,6 +555,7 @@ manifest:
     pygments.token: pygments
     pygments.unistring: pygments
     pygments.util: pygments
+    pytest: pytest
     rich: rich
     rich.abc: rich
     rich.align: rich
@@ -627,4 +632,4 @@ manifest:
     typing_extensions: typing_extensions
   pip_repository:
     name: pip
-integrity: 8e6a595c6f2665dfb7d9cf0baa39d86036a55c2cbe62bfe695662429341cfecd
+integrity: c4a39ffe515eb77a946a4624becf364ac475488f02df05c7d252243e470f30fa

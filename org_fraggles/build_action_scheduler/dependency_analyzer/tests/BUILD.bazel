@@ -1,0 +1,24 @@
+load("@rules_python//python:defs.bzl", "py_test")
+
+py_test(
+    name = "test_detect_cycle",
+    srcs = ["test_detect_cycle.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//org_fraggles/build_action_scheduler/actions_info",
+        "//org_fraggles/build_action_scheduler/dependency_analyzer",
+        "//org_fraggles/build_action_scheduler/types",
+        "@pip//pytest",
+    ],
+)
+
+py_test(
+    name = "test_critical_paths",
+    srcs = ["test_critical_paths.py"],
+    deps = [
+        "//org_fraggles/build_action_scheduler/actions_info",
+        "//org_fraggles/build_action_scheduler/dependency_analyzer",
+        "//org_fraggles/build_action_scheduler/types",
+        "@pip//pytest",
+    ],
+)

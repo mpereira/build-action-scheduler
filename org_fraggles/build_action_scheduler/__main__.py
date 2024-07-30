@@ -1,19 +1,52 @@
 import json
-from dataclasses import asdict
+import logging
+import time
+from typing import Annotated
 
 import typer
 
-from org_fraggles.build_action_scheduler import Action, ActionModel, schedule
+from org_fraggles.build_action_scheduler.actions_info import ActionsInfo
+from org_fraggles.build_action_scheduler.dependency_analyzer import DependencyAnalyzer
+from org_fraggles.build_action_scheduler.scheduler import ActionScheduler
+from org_fraggles.build_action_scheduler.types import Action, ActionModel
+
+log = logging.getLogger(__name__)
+
+logging.Formatter.converter = time.gmtime
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%SZ",
+)
 
 
 def main(
-    parallelism: int = typer.Option(
-        ..., help="The maximum number of actions to execute in parallel."
-    ),
-    actions_file: str = typer.Option(
-        ...,
-        help="The path to the JSON file containing the list of actions to schedule.",
-    ),
+    parallelism: Annotated[
+        int,
+        typer.Option(..., help="The maximum number of actions to execute in parallel."),
+    ],
+    actions_file: Annotated[
+        str,
+        typer.Option(
+            ...,
+            help="The path to the JSON file containing the list of actions to schedule.",
+        ),
+    ],
+    action_status_polling_interval_s: Annotated[
+        int,
+        typer.Option(
+            ...,
+            help="The interval in seconds to poll for actions ready to be scheduled.",
+        ),
+    ] = 1,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            ...,
+            help="Whether or not to actually execute actions. True will skip the sleep calls.",
+        ),
+    ] = False,
 ) -> None:
     """Prints a JSON-formatted build report.
 
@@ -27,28 +60,21 @@ def main(
     # Validate JSON data.
     action_models = [ActionModel(**action) for action in actions_data]
 
-    # Get action objects.
-    action_objects = [Action(**action.dict()) for action in action_models]
+    actions = [Action(**action.dict()) for action in action_models]
 
-    # Schedule and print build.
-    build_report = schedule(parallelism, action_objects)
+    actions_info = ActionsInfo(actions=actions)
 
-    execution_batches = [[asdict(a) for a in b] for b in build_report.execution_batches]
-    ordered_action_executions = [
-        asdict(a) for b in build_report.execution_batches for a in b
-    ]
+    dependency_analyzer = DependencyAnalyzer(actions_info=actions_info)
 
-    print(
-        json.dumps(
-            {
-                "execution_batches": execution_batches,
-                "ordered_action_executions": ordered_action_executions,
-                "critical_path": build_report.critical_path,
-                "critical_path_duration": build_report.critical_path_duration,
-            },
-            indent=2,
-        )
-    )
+    build_report = ActionScheduler(
+        parallelism=parallelism,
+        action_status_polling_interval_s=action_status_polling_interval_s,
+        dry_run=dry_run,
+        actions_info=actions_info,
+        dependency_analyzer=dependency_analyzer,
+    ).schedule()
+
+    print(json.dumps(build_report, indent=2))
 
 
 if __name__ == "__main__":

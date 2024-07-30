@@ -1,0 +1,259 @@
+[
+  {
+    "sha1": "a",
+    "duration": 3,
+    "dependencies": [
+      "b",
+      "c",
+      "d"
+    ]
+  },
+  {
+    "sha1": "b",
+    "duration": 7,
+    "dependencies": [
+      "e",
+      "f"
+    ]
+  },
+  {
+    "sha1": "c",
+    "duration": 2,
+    "dependencies": [
+      "g",
+      "h",
+      "i"
+    ]
+  },
+  {
+    "sha1": "d",
+    "duration": 1,
+    "dependencies": [
+      "j",
+      "k"
+    ]
+  },
+  {
+    "sha1": "e",
+    "duration": 4,
+    "dependencies": [
+      "l",
+      "m",
+      "n",
+      "o"
+    ]
+  },
+  {
+    "sha1": "f",
+    "duration": 5,
+    "dependencies": [
+      "p",
+      "q"
+    ]
+  },
+  {
+    "sha1": "g",
+    "duration": 6,
+    "dependencies": [
+      "r"
+    ]
+  },
+  {
+    "sha1": "h",
+    "duration": 9,
+    "dependencies": [
+      "s",
+      "t",
+      "u"
+    ]
+  },
+  {
+    "sha1": "i",
+    "duration": 8,
+    "dependencies": []
+  },
+  {
+    "sha1": "j",
+    "duration": 1,
+    "dependencies": [
+      "v",
+      "w",
+      "x"
+    ]
+  },
+  {
+    "sha1": "k",
+    "duration": 12,
+    "dependencies": [
+      "y",
+      "z"
+    ]
+  },
+  {
+    "sha1": "l",
+    "duration": 11,
+    "dependencies": []
+  },
+  {
+    "sha1": "m",
+    "duration": 15,
+    "dependencies": []
+  },
+  {
+    "sha1": "n",
+    "duration": 7,
+    "dependencies": [
+      "aa"
+    ]
+  },
+  {
+    "sha1": "o",
+    "duration": 6,
+    "dependencies": [
+      "bb",
+      "cc"
+    ]
+  },
+  {
+    "sha1": "p",
+    "duration": 2,
+    "dependencies": []
+  },
+  {
+    "sha1": "q",
+    "duration": 3,
+    "dependencies": [
+      "dd",
+      "ee",
+      "ff"
+    ]
+  },
+  {
+    "sha1": "r",
+    "duration": 4,
+    "dependencies": []
+  },
+  {
+    "sha1": "s",
+    "duration": 5,
+    "dependencies": [
+      "gg",
+      "hh"
+    ]
+  },
+  {
+    "sha1": "t",
+    "duration": 6,
+    "dependencies": []
+  },
+  {
+    "sha1": "u",
+    "duration": 9,
+    "dependencies": [
+      "ii"
+    ]
+  },
+  {
+    "sha1": "v",
+    "duration": 8,
+    "dependencies": []
+  },
+  {
+    "sha1": "w",
+    "duration": 1,
+    "dependencies": []
+  },
+  {
+    "sha1": "x",
+    "duration": 11,
+    "dependencies": [
+      "jj"
+    ]
+  },
+  {
+    "sha1": "y",
+    "duration": 2,
+    "dependencies": []
+  },
+  {
+    "sha1": "z",
+    "duration": 3,
+    "dependencies": [
+      "kk",
+      "ll"
+    ]
+  },
+  {
+    "sha1": "aa",
+    "duration": 4,
+    "dependencies": []
+  },
+  {
+    "sha1": "bb",
+    "duration": 5,
+    "dependencies": []
+  },
+  {
+    "sha1": "cc",
+    "duration": 6,
+    "dependencies": [
+      "mm",
+      "nn"
+    ]
+  },
+  {
+    "sha1": "dd",
+    "duration": 9,
+    "dependencies": []
+  },
+  {
+    "sha1": "ee",
+    "duration": 8,
+    "dependencies": []
+  },
+  {
+    "sha1": "ff",
+    "duration": 7,
+    "dependencies": []
+  },
+  {
+    "sha1": "gg",
+    "duration": 1,
+    "dependencies": []
+  },
+  {
+    "sha1": "hh",
+    "duration": 11,
+    "dependencies": []
+  },
+  {
+    "sha1": "ii",
+    "duration": 4,
+    "dependencies": []
+  },
+  {
+    "sha1": "jj",
+    "duration": 3,
+    "dependencies": []
+  },
+  {
+    "sha1": "kk",
+    "duration": 2,
+    "dependencies": []
+  },
+  {
+    "sha1": "ll",
+    "duration": 1,
+    "dependencies": []
+  },
+  {
+    "sha1": "mm",
+    "duration": 5,
+    "dependencies": []
+  },
+  {
+    "sha1": "nn",
+    "duration": 6,
+    "dependencies": []
+  }
+]
