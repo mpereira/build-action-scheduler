@@ -3,56 +3,55 @@
   This projects implements a build action scheduler that can execute tasks in
   parallel.
 
-  Until there are no actions left, it will iterate on:
-  1. Identifying actions with no dependencies
-  2. Collecting a batch of actions with no dependencies of size up to the
-     specified parallelism
-  3. Executing the collected actions batch
+  The scheduler works by:
+  1. Identifying paths from all leaf actions (actions with no dependencies) to
+     root actions (actions that aren't depended on)
+  2. Putting these paths in a priority queue that uses the total path duration
+     as the priority
+  3. Iterating on getting paths from the priority queue (paths with higher total
+     duration come first) and checking if their head action has no pending
+     dependencies (i.e., they either have no dependencies or their dependencies
+     have been executed). These are considered ready to execute
+  4. Adding ready actions to a queue, updating the priority queue paths when
+     taking their head action
+  5. Whenever an action finishes executing, schedule as many actions as possible
+     from the queue, based on the current scheduler capacity (dictated by
+     parallelism)
+  6. If the scheduler is at full capacity, poll it periodically
 
-  Step #3 updates internal state in a way that it represents the state in which
-  the actions were executed.
-
-  To use the scheduler, build the CLI executable and run it against JSON files
-  containing lists of actions.
-
-** Build Python CLI executable
-   #+begin_src bash
-   make bazel_python_app_build 
-   #+end_src
-
-** Run build action scheduler
-   #+begin_src bash
-   python3 ./bazel-bin/org_fraggles/build_action_scheduler/build_action_scheduler_bin.zip \
-           --parallelism 2 \
-           --actions-file actions.json 
-   #+end_src
-
+  This algorithm makes sure that the scheduler will at every iteration try to
+  execute actions from the paths with the largest durations (the most critical
+  paths), guaranteeing that given a high parallelism, the wall duration for the
+  full scheduler execution will be similar to the critical path duration.
+     
 ** Example execution
+   The scheduler application takes action files as input:
+   
    #+begin_src bash
    cat <<EOF > test_actions_0.json
    [
      {
        "sha1": "e",
-       "duration": 50,
+       "duration": 5,
        "dependencies": []
      },
      {
        "sha1": "b",
-       "duration": 20,
+       "duration": 2,
        "dependencies": [
          "e"
        ]
      },
      {
        "sha1": "c",
-       "duration": 30,
+       "duration": 3,
        "dependencies": [
          "e"
        ]
      },
      {
        "sha1": "d",
-       "duration": 10,
+       "duration": 1,
        "dependencies": [
          "b",
          "c"
@@ -60,107 +59,179 @@
      },
      {
        "sha1": "f",
-       "duration": 60,
+       "duration": 6,
        "dependencies": []
+     },
+     {
+       "sha1": "g",
+       "duration": 6,
+       "dependencies": [
+         "d",
+         "f"
+       ]
+     },
+     {
+       "sha1": "x",
+       "duration": 6,
+       "dependencies": [
+         "g"
+       ]
+     },
+     {
+       "sha1": "y",
+       "duration": 6,
+       "dependencies": [
+         "x"
+       ]
+     },
+     {
+       "sha1": "z",
+       "duration": 6,
+       "dependencies": [
+         "c"
+       ]
      }
    ]
    EOF
    #+end_src
 
+   Run the scheduler application CLI and give it the actions file created above:
+
    #+begin_src bash :results code raw
-   python3 ./bazel-bin/org_fraggles/build_action_scheduler/build_action_scheduler_bin.zip \
-           --parallelism 2 \
-           --actions-file test_actions_0.json 
+   bazel run //org_fraggles/build_action_scheduler:build_action_scheduler_bin \
+         -- \
+         --parallelism 5 \
+         --actions-file test_actions_0.json 
    #+end_src
 
-   The output will show:
-   1. The =execution_batches= that were executed in parallel
-   2. A valid sequence of =ordered_action_executions=, based on the execution batches
-   3. The =critical_path=
-   4. The =critical_path_duration=
+   Scheduler status updates will be streamed to stderr:
+
+   #+begin_src text
+   2024-07-30T01:14:01Z INFO 1 actions running: C
+   2024-07-30T01:14:01Z INFO 2 actions running: G, C
+   2024-07-30T01:14:01Z INFO 3 actions running: G, C, F
+   2024-07-30T01:14:01Z INFO 4 actions running: E, G, C, F
+   2024-07-30T01:14:01Z INFO 4 actions running: E, G, C, F
+   2024-07-30T01:14:02Z INFO 4 actions running: E, G, C, F
+   2024-07-30T01:14:02Z INFO 3 actions running: G, C, F | actions done: E
+   2024-07-30T01:14:03Z INFO 3 actions running: G, C, F | actions done: E
+   2024-07-30T01:14:04Z INFO 3 actions running: G, C, F | actions done: E
+   2024-07-30T01:14:05Z INFO 3 actions running: G, C, F | actions done: E
+   2024-07-30T01:14:06Z INFO 2 actions running: G, C | actions done: E, F
+   2024-07-30T01:14:06Z INFO 2 actions running: G, C | actions done: E, F
+   2024-07-30T01:14:07Z INFO 1 actions running: C | actions done: E, F, G
+   2024-07-30T01:14:07Z INFO 1 actions running: C | actions done: E, F, G
+   2024-07-30T01:14:07Z INFO 2 actions running: D, C | actions done: E, F, G
+   2024-07-30T01:14:08Z INFO 2 actions running: D, C | actions done: E, F, G
+   2024-07-30T01:14:08Z INFO 1 actions running: C | actions done: E, F, G, D
+   2024-07-30T01:14:09Z INFO 1 actions running: C | actions done: E, F, G, D
+   2024-07-30T01:14:09Z INFO 2 actions running: B, C | actions done: E, F, G, D
+   2024-07-30T01:14:10Z INFO 2 actions running: B, C | actions done: E, F, G, D
+   2024-07-30T01:14:11Z INFO 1 actions running: B | actions done: E, F, G, D, C
+   2024-07-30T01:14:11Z INFO 1 actions running: B | actions done: E, F, G, D, C
+   2024-07-30T01:14:12Z INFO 0 actions running | actions done: E, F, G, D, C, B
+   2024-07-30T01:14:12Z INFO 1 actions running: A | actions done: E, F, G, D, C, B
+   2024-07-30T01:14:16Z INFO 0 actions running | actions done: E, F, G, D, C, B, A
+   #+end_src
+
+   And a report will be printed to stdout, showing:
+   1. The =action_execution_history= based on action execution start times
+   2. The critical path and its duration
 
    #+begin_src text
    {
-     "execution_batches": [
-       [
-         {
-           "sha1": "e",
-           "duration": 50,
-           "dependencies": []
-         },
-         {
-           "sha1": "f",
-           "duration": 60,
-           "dependencies": []
-         }
-       ],
-       [
-         {
-           "sha1": "b",
-           "duration": 20,
-           "dependencies": [
-             "e"
-           ]
-         },
-         {
-           "sha1": "c",
-           "duration": 30,
-           "dependencies": [
-             "e"
-           ]
-         }
-       ],
-       [
-         {
-           "sha1": "d",
-           "duration": 10,
-           "dependencies": [
-             "b",
-             "c"
-           ]
-         }
+     "action_execution_history": [
+       "C",
+       "G",
+       "F",
+       "E",
+       "D",
+       "B",
+       "A"
+     ],
+     "critical_path": {
+       "duration": 14,
+       "path": [
+         "C",
+         "A"
        ]
-     ],
-     "ordered_action_executions": [
-       {
-         "sha1": "e",
-         "duration": 50,
-         "dependencies": []
-       },
-       {
-         "sha1": "f",
-         "duration": 60,
-         "dependencies": []
-       },
-       {
-         "sha1": "b",
-         "duration": 20,
-         "dependencies": [
-           "e"
-         ]
-       },
-       {
-         "sha1": "c",
-         "duration": 30,
-         "dependencies": [
-           "e"
-         ]
-       },
-       {
-         "sha1": "d",
-         "duration": 10,
-         "dependencies": [
-           "b",
-           "c"
-         ]
-       }
-     ],
-     "critical_path": [
-       "e",
-       "c",
-       "d"
-     ],
-     "critical_path_duration": 90
+     }
    }
    #+end_src
 
+   Changing =parallelism= to =1= will show a different stream of scheduler
+   status updates:
+
+   #+begin_src bash :results code raw
+   bazel run //org_fraggles/build_action_scheduler:build_action_scheduler_bin \
+         -- \
+         --parallelism 1 \
+         --actions-file test_actions_0.json 
+   #+end_src
+
+   #+begin_src text
+   2024-07-30T01:16:48Z INFO 1 actions running: C
+   2024-07-30T01:16:48Z INFO 1 actions running: C
+   2024-07-30T01:16:49Z INFO 1 actions running: C
+   2024-07-30T01:16:50Z INFO 1 actions running: C
+   2024-07-30T01:16:51Z INFO 1 actions running: C
+   2024-07-30T01:16:52Z INFO 1 actions running: C
+   2024-07-30T01:16:53Z INFO 1 actions running: C
+   2024-07-30T01:16:54Z INFO 1 actions running: C
+   2024-07-30T01:16:55Z INFO 1 actions running: C
+   2024-07-30T01:16:56Z INFO 1 actions running: C
+   2024-07-30T01:16:57Z INFO 1 actions running: C
+   2024-07-30T01:16:58Z INFO 0 actions running | actions done: C
+   2024-07-30T01:16:58Z INFO 0 actions running | actions done: C
+   2024-07-30T01:16:58Z INFO 1 actions running: G | actions done: C
+   2024-07-30T01:16:59Z INFO 1 actions running: G | actions done: C
+   2024-07-30T01:17:00Z INFO 1 actions running: G | actions done: C
+   2024-07-30T01:17:01Z INFO 1 actions running: G | actions done: C
+   2024-07-30T01:17:02Z INFO 1 actions running: G | actions done: C
+   2024-07-30T01:17:03Z INFO 1 actions running: G | actions done: C
+   2024-07-30T01:17:04Z INFO 0 actions running | actions done: C, G
+   2024-07-30T01:17:04Z INFO 1 actions running: F | actions done: C, G
+   2024-07-30T01:17:04Z INFO 1 actions running: F | actions done: C, G
+   2024-07-30T01:17:05Z INFO 1 actions running: F | actions done: C, G
+   2024-07-30T01:17:06Z INFO 1 actions running: F | actions done: C, G
+   2024-07-30T01:17:07Z INFO 1 actions running: F | actions done: C, G
+   2024-07-30T01:17:08Z INFO 1 actions running: F | actions done: C, G
+   2024-07-30T01:17:09Z INFO 0 actions running | actions done: C, G, F
+   2024-07-30T01:17:09Z INFO 1 actions running: E | actions done: C, G, F
+   2024-07-30T01:17:09Z INFO 1 actions running: E | actions done: C, G, F
+   2024-07-30T01:17:10Z INFO 0 actions running | actions done: C, G, F, E
+   2024-07-30T01:17:10Z INFO 0 actions running | actions done: C, G, F, E
+   2024-07-30T01:17:10Z INFO 1 actions running: D | actions done: C, G, F, E
+   2024-07-30T01:17:11Z INFO 1 actions running: D | actions done: C, G, F, E
+   2024-07-30T01:17:11Z INFO 0 actions running | actions done: C, G, F, E, D
+   2024-07-30T01:17:12Z INFO 0 actions running | actions done: C, G, F, E, D
+   2024-07-30T01:17:12Z INFO 1 actions running: B | actions done: C, G, F, E, D
+   2024-07-30T01:17:13Z INFO 1 actions running: B | actions done: C, G, F, E, D
+   2024-07-30T01:17:14Z INFO 1 actions running: B | actions done: C, G, F, E, D
+   2024-07-30T01:17:15Z INFO 0 actions running | actions done: C, G, F, E, D, B
+   2024-07-30T01:17:15Z INFO 1 actions running: A | actions done: C, G, F, E, D, B
+   2024-07-30T01:17:19Z INFO 0 actions running | actions done: C, G, F, E, D, B, A
+   #+end_src
+
+   But the same report:
+
+   #+begin_src json
+   {
+     "action_execution_history": [
+       "C",
+       "G",
+       "F",
+       "E",
+       "D",
+       "B",
+       "A"
+     ],
+     "critical_path": {
+       "duration": 14,
+       "path": [
+         "C",
+         "A"
+       ]
+     }
+   }
+   #+end_src
