@@ -1,5 +1,4 @@
 import logging
-from queue import PriorityQueue
 import time
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
@@ -20,6 +19,7 @@ from org_fraggles.build_action_scheduler.types import ActionDuration, ActionSha1
 log = logging.getLogger(__name__)
 
 Timestamp = str
+
 
 class ActionScheduler(BaseModel):
     # The maximum number of actions to be executing in parallel at any given time.

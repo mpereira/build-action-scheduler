@@ -242,3 +242,8 @@
          --parallelism 50 \
          --actions-file data/complex_actions.json
    #+end_src
+
+** Run tests
+   #+begin_src bash :results code raw
+   make bazel_python_test
+   #+end_src
