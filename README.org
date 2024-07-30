@@ -243,6 +243,17 @@
          --actions-file data/complex_actions.json
    #+end_src
 
+   Use the =--dry-run= flag to make the scheduler skip the =time.sleep= calls
+   when executing actions:
+
+   #+begin_src bash :results code raw
+   bazel run //org_fraggles/build_action_scheduler:build_action_scheduler_bin \
+         -- \
+         --dry-run \
+         --parallelism 50 \
+         --actions-file data/complex_actions.json
+   #+end_src
+
 ** Run tests
    #+begin_src bash :results code raw
    make bazel_python_test

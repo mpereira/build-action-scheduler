@@ -28,6 +28,9 @@ class ActionScheduler(BaseModel):
     # The interval in seconds to poll for actions ready to be scheduled.
     action_status_polling_interval_s: int
 
+    # Don't actually execute actions (i.e., don't actually sleep).
+    dry_run: bool
+
     # Actions info.
     actions_info: ActionsInfo
 
@@ -121,7 +124,9 @@ class ActionScheduler(BaseModel):
         self._on_action_execution_start(action_sha1)
 
         duration = self.actions_info.actions_by_sha1[action_sha1].duration
-        time.sleep(duration)
+
+        if not self.dry_run:
+            time.sleep(duration)
 
         self._on_action_execution_done(action_sha1, duration)
 

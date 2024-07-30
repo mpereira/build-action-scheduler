@@ -9,7 +9,6 @@ py_test(
         "//org_fraggles/build_action_scheduler/dependency_analyzer",
         "//org_fraggles/build_action_scheduler/scheduler",
         "//org_fraggles/build_action_scheduler/types",
-        "@pip//pydantic",
         "@pip//pytest",
     ],
 )

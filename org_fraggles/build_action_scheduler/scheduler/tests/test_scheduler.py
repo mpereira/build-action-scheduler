@@ -27,6 +27,7 @@ def action_scheduler(actions_info, dependency_analyzer):
     return ActionScheduler(
         parallelism=2,
         action_status_polling_interval_s=1,
+        dry_run=True,
         actions_info=actions_info,
         dependency_analyzer=dependency_analyzer,
     )

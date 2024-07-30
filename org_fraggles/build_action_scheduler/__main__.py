@@ -40,6 +40,13 @@ def main(
             help="The interval in seconds to poll for actions ready to be scheduled.",
         ),
     ] = 1,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            ...,
+            help="Whether or not to actually execute actions. True will skip the sleep calls.",
+        ),
+    ] = False,
 ) -> None:
     """Prints a JSON-formatted build report.
 
@@ -62,6 +69,7 @@ def main(
     build_report = ActionScheduler(
         parallelism=parallelism,
         action_status_polling_interval_s=action_status_polling_interval_s,
+        dry_run=dry_run,
         actions_info=actions_info,
         dependency_analyzer=dependency_analyzer,
     ).schedule()
