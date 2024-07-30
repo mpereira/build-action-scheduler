@@ -23,7 +23,21 @@
   execute actions from the paths with the largest durations (the most critical
   paths), guaranteeing that given a high parallelism, the wall duration for the
   full scheduler execution will be similar to the critical path duration.
-     
+
+  There's a sketch of the algorithm included in =data/algorithm_sketch.png=.
+
+  [[file:data/algorithm_sketch.png]]
+
+  It shows:
+  1. The action tree (same for example below). Leaf nodes have no dependencies.
+  2. The initial action pending dependencies counts
+  3. The priority queue with all possible paths from leaf to root actions.
+  4. Checking the head of paths in the priority queue to see if they have zero
+     pending dependencies. If so, add them to the "ready queue".
+  5. Scheduler picks actions from the ready queue and updates the pending
+     dependencies count status.
+  6. Iterate.
+
 ** Example execution
    The scheduler application takes action files as input:
    
@@ -31,64 +45,47 @@
    cat <<EOF > test_actions_0.json
    [
      {
-       "sha1": "e",
+       "sha1": "G",
+       "duration": 6,
+       "dependencies": []
+     },
+     {
+       "sha1": "F",
        "duration": 5,
        "dependencies": []
      },
      {
-       "sha1": "b",
-       "duration": 2,
-       "dependencies": [
-         "e"
-       ]
-     },
-     {
-       "sha1": "c",
-       "duration": 3,
-       "dependencies": [
-         "e"
-       ]
-     },
-     {
-       "sha1": "d",
+       "sha1": "E",
        "duration": 1,
-       "dependencies": [
-         "b",
-         "c"
-       ]
-     },
-     {
-       "sha1": "f",
-       "duration": 6,
        "dependencies": []
      },
      {
-       "sha1": "g",
-       "duration": 6,
+       "sha1": "D",
+       "duration": 1,
        "dependencies": [
-         "d",
-         "f"
+         "F",
+         "G"
        ]
      },
      {
-       "sha1": "x",
-       "duration": 6,
+       "sha1": "B",
+       "duration": 3,
        "dependencies": [
-         "g"
+         "D",
+         "E"
        ]
      },
      {
-       "sha1": "y",
-       "duration": 6,
-       "dependencies": [
-         "x"
-       ]
+       "sha1": "C",
+       "duration": 10,
+       "dependencies": []
      },
      {
-       "sha1": "z",
-       "duration": 6,
+       "sha1": "A",
+       "duration": 4,
        "dependencies": [
-         "c"
+         "B",
+         "C"
        ]
      }
    ]
@@ -234,4 +231,14 @@
        ]
      }
    }
+   #+end_src
+
+   I also added a more complex actions file in =data/complex_actions.json=. Run
+   it with:
+
+   #+begin_src bash :results code raw
+   bazel run //org_fraggles/build_action_scheduler:build_action_scheduler_bin \
+         -- \
+         --parallelism 50 \
+         --actions-file data/complex_actions.json
    #+end_src

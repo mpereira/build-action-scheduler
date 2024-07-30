@@ -37,7 +37,7 @@ def main(
         int,
         typer.Option(
             ...,
-            help="The interval in seconds to poll for actions ready to be scheduled",
+            help="The interval in seconds to poll for actions ready to be scheduled.",
         ),
     ] = 1,
 ) -> None:

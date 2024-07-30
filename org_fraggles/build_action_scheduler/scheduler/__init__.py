@@ -1,4 +1,5 @@
 import logging
+from queue import PriorityQueue
 import time
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
@@ -20,12 +21,11 @@ log = logging.getLogger(__name__)
 
 Timestamp = str
 
-
 class ActionScheduler(BaseModel):
     # The maximum number of actions to be executing in parallel at any given time.
     parallelism: int
 
-    # TODO.
+    # The interval in seconds to poll for actions ready to be scheduled.
     action_status_polling_interval_s: int
 
     # Actions info.
@@ -85,7 +85,7 @@ class ActionScheduler(BaseModel):
 
         with ThreadPoolExecutor(max_workers=self.parallelism) as executor:
             while not self._critical_paths.empty():
-                for action in self._prepare_next_ready_actions():
+                for action in self._find_next_ready_actions():
                     ready_actions.appendleft(action)
 
                 actions_submitted = self._submit_as_many_as_possible(
@@ -127,7 +127,7 @@ class ActionScheduler(BaseModel):
 
         return duration
 
-    def _prepare_next_ready_actions(self) -> List[ActionSha1]:
+    def _find_next_ready_actions(self) -> List[ActionSha1]:
         """Iterates over the critical paths and returns the actions that are ready to be executed.
 
         Actions are ready to be executed if they have no pending dependencies.
